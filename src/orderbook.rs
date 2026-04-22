@@ -13,25 +13,10 @@ pub fn aggregate_orders(orders:&Vec<Order>) -> BTreeMap<u64,u64>{
     map
 }
 
-pub fn sort_calculate_best(aggregated_orders:&BTreeMap<u64,u64>,side:&OrderSide) -> (BTreeMap<u64, u64>, u64){
+// orderbook.rs — replace sort_calculate_best with this
+pub fn calculate_best(aggregated_orders: &BTreeMap<u64, u64>, side: &OrderSide) -> u64 {
     match side {
-        OrderSide::Buy => {
-            // sort the aggregated orders in descending order for bids
-            let sorted_bids = aggregated_orders.iter().rev().map(|(price, qty)| (*price, *qty)).collect::<BTreeMap<u64, u64>>();
-            let best_bid = match sorted_bids.iter().next(){
-                Some((best_bid,_))=>*best_bid,
-                None => 0
-            };
-            (sorted_bids,best_bid)
-        },
-        OrderSide::Sell => {
-            // sort the aggregated orders in ascending order for asks
-            let sorted_asks = aggregated_orders.iter().map(|(price, qty)| (*price, *qty)).collect::<BTreeMap<u64, u64>>();
-            let best_ask = match sorted_asks.iter().next(){
-                Some((best_ask,_))=>*best_ask,
-                None => 0
-            };
-            (sorted_asks,best_ask)
-        }
+        OrderSide::Buy  => aggregated_orders.keys().next_back().cloned().unwrap_or(0),
+        OrderSide::Sell => aggregated_orders.keys().next().cloned().unwrap_or(0),
     }
 }

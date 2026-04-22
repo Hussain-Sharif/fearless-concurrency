@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+use crate::order::Trade;
+
 mod order;
 mod orderbook;
 mod fake_data;
@@ -46,8 +48,6 @@ fn main() {
     let incoming_test_data = fake_data::generate_fake_orders(20);
 
     let mut order_book_storage: Vec<order::Order> = Vec::new();
-    let mut sorted_bids: BTreeMap<u64, u64> = BTreeMap::new();
-    let mut sorted_asks: BTreeMap<u64, u64> = BTreeMap::new();
     let mut best_bid: u64 = 0;
     let mut best_ask: u64 = 0;
 
@@ -76,51 +76,45 @@ fn main() {
 
         match &decision {
             order::OrderDecision::Accept | order::OrderDecision::Resting => {
-                // Both accepted and resting orders go into the book
-                // Rejected orders do NOT touch the book
                 order_book_storage.push(order.clone());
 
-                // recalculate best bid and ask after every new order
-                let bids: Vec<order::Order> = order_book_storage
-                    .iter()
-                    .filter(|o| o.side == order::OrderSide::Buy)
-                    .cloned()
-                    .collect();
+                loop {
+                    // Recalculate after every match attempt
+                    let bids: Vec<order::Order> = order_book_storage.iter()
+                        .filter(|o| o.side == order::OrderSide::Buy && o.qty > 0)
+                        .cloned().collect();
+                    let asks: Vec<order::Order> = order_book_storage.iter()
+                        .filter(|o| o.side == order::OrderSide::Sell && o.qty > 0)
+                        .cloned().collect();
 
-                let asks: Vec<order::Order> = order_book_storage
-                    .iter()
-                    .filter(|o| o.side == order::OrderSide::Sell)
-                    .cloned()
-                    .collect();
+                    let agg_bids = orderbook::aggregate_orders(&bids);
+                    let agg_asks = orderbook::aggregate_orders(&asks);
 
-                let agg_bids = orderbook::aggregate_orders(&bids);
-                let agg_asks = orderbook::aggregate_orders(&asks);
+                    best_bid = orderbook::calculate_best(&agg_bids, &order::OrderSide::Buy);
+                    best_ask = orderbook::calculate_best(&agg_asks, &order::OrderSide::Sell);
 
-                (sorted_bids,best_bid) = orderbook::sort_calculate_best(&agg_bids, &order::OrderSide::Buy);
-                (sorted_asks,best_ask) = orderbook::sort_calculate_best(&agg_asks, &order::OrderSide::Sell);
+                    // Only try matching if spread has crossed
+                    if best_bid > 0 && best_ask > 0 && best_bid >= best_ask {
+                        
+                        match engine::try_match_order(&mut order_book_storage, &agg_bids, &agg_asks) {
+                            Some(trade) => {
+                                
+                                println!(
+                                    " TRADE-MATCHED -> buy#{} X sell#{} | qty={} @ ${}",
+                                    trade.buy_order_id, trade.sell_order_id,
+                                    trade.fill_qty, trade.fill_price
+                                );
 
-                // From here simply use matching engine to match and update the orderbook
 
-                let mut current_best_bid = best_bid;
-                let mut current_best_ask = best_ask;
-
-                while(true){
-                    if (best_bid > 0 && best_ask > 0) && (current_best_bid >= current_best_ask){
-                        // match happening.
-
-                        if !engine::try_match_order(&mut order_book_storage, &mut sorted_bids, &mut sorted_asks){
-                            break;
+                                // Remove fully filled orders (qty == 0) from book
+                                order_book_storage.retain(|o| o.qty > 0);
+                            }
+                            None => break, // no more matches possible
                         }
-                        
-                        // remove orders with zero qty from order_book_storage, sorted_bids, and sorted_asks
-                        
-
-
-                    }else {
-                        // resting.
-                        break;
+                    } else {
+                        break; // spread not crossed, nothing to match
                     }
-                } 
+                }
 
                 match decision {
                     order::OrderDecision::Accept  => accept_count  += 1,
