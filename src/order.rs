@@ -14,17 +14,18 @@ pub enum  OrderSide{
 #[derive(Clone,Debug,PartialEq)]
 pub enum OrderDecision{
     ACCEPT,
-    REJECT
+    REJECT,
+    RESTING
 }
 
 
 #[derive(Clone,Debug)]
 pub struct Order {
-    id:u64,
-    order_type: OrderType,
-    side: OrderSide,
-    price: u64,
-    qty: u64,
+    pub id:u64,
+    pub order_type: OrderType,
+    pub side: OrderSide,
+    pub price: u64,
+    pub qty: u64,
 }
 
 impl Order {
